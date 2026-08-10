@@ -19,7 +19,7 @@
 //! statements. This keeps changed ABAP routines from collapsing to identical
 //! shallow nodes when no full grammar is available.
 
-use intentdiff_plugin_sdk::tree::{SemanticNode, SemanticNodeBuilder};
+use intentumdiff_plugin_sdk::tree::{SemanticNode, SemanticNodeBuilder};
 
 wit_bindgen::generate!({
     path: "wit/plugin.wit",
@@ -34,7 +34,7 @@ use crate::exports::intentdiff::plugin::parser::ParserMode;
 const PLUGIN_METADATA: &str = include_str!("../plugin_metadata.info");
 
 fn language_info_for(ids: Vec<String>) -> Vec<LanguageInfoRecord> {
-    let metadata = intentdiff_plugin_sdk::metadata::parse_plugin_metadata(PLUGIN_METADATA);
+    let metadata = intentumdiff_plugin_sdk::metadata::parse_plugin_metadata(PLUGIN_METADATA);
     ids.into_iter()
         .map(|language_id| {
             let info = metadata.language_or_default(&language_id);
@@ -776,7 +776,7 @@ export!(AbapParser);
 mod tests {
     use super::*;
 
-    intentdiff_plugin_sdk::plugin_compliance_tests! {
+    intentumdiff_plugin_sdk::plugin_compliance_tests! {
         process: parse_abap,
         detect_fn: detect_language_impl,
         detect_cases: [
@@ -806,26 +806,26 @@ mod tests {
     #[test]
     fn test_valid_json_no_error() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_valid_json(&out, "SAMPLE");
-        intentdiff_plugin_sdk::testing::assert_no_error(&out, "SAMPLE");
+        intentumdiff_plugin_sdk::testing::assert_valid_json(&out, "SAMPLE");
+        intentumdiff_plugin_sdk::testing::assert_no_error(&out, "SAMPLE");
     }
 
     #[test]
     fn test_root_is_program() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_root_node_type(&out, "program", "SAMPLE");
+        intentumdiff_plugin_sdk::testing::assert_root_node_type(&out, "program", "SAMPLE");
     }
 
     #[test]
     fn test_report_leaf() {
         let out = parse_abap("REPORT ztest.");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "report");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "report");
     }
 
     #[test]
     fn test_class_definition() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "class_definition",
             "class_definition",
@@ -835,8 +835,8 @@ mod tests {
     #[test]
     fn test_class_impl_with_method() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "class_impl", "class_impl");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "method", "method");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "class_impl", "class_impl");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "method", "method");
     }
 
     #[test]
@@ -847,16 +847,16 @@ mod tests {
             \nCLASS zcl_manager IMPLEMENTATION.\n  METHOD get_data.\n    WRITE: 'Hello'.\n  ENDMETHOD.\nENDCLASS.\n";
         let out = tree_sitter_json(src);
 
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "report");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "interface", "interface");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "report");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "interface", "interface");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "class_definition",
             "class_definition",
         );
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "class_impl", "class_impl");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "method", "method");
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "class_impl", "class_impl");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "method", "method");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "write_statement",
             "write_statement",
@@ -868,12 +868,12 @@ mod tests {
         let src = "FUNCTION z_my_func.\n  WRITE: 'x'.\nENDFUNCTION.\n";
         let out = tree_sitter_json(src);
 
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "function_module",
             "function_module",
         );
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "write_statement",
             "write_statement",
@@ -885,13 +885,13 @@ mod tests {
         let src = "REPORT ztest.\n\nFORM greet.\n  WRITE: 'Hello'.\nENDFORM.\n";
         assert!(parse_abap_tree_sitter(src).is_none());
         let out = parse_abap(src);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "form", "form");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "form", "form");
     }
 
     #[test]
     fn test_form_block() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "form", "form");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "form", "form");
     }
 
     #[test]
@@ -937,14 +937,14 @@ mod tests {
     fn test_comment_lines_ignored() {
         let src = "* This is a comment\n\" This too\nREPORT ztest.";
         let out = parse_abap(src);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "with comments");
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "with comments");
     }
 
     #[test]
     fn test_function_module() {
         let src = "FUNCTION z_my_func.\n  \" code\nENDFUNCTION.";
         let out = parse_abap(src);
-        intentdiff_plugin_sdk::testing::assert_contains_node_type(
+        intentumdiff_plugin_sdk::testing::assert_contains_node_type(
             &out,
             "function_module",
             "function_module",
@@ -954,7 +954,7 @@ mod tests {
     #[test]
     fn test_labels_nonempty() {
         let out = parse_abap(SAMPLE);
-        intentdiff_plugin_sdk::testing::assert_labels_nonempty(&out, "class_definition", "labels");
-        intentdiff_plugin_sdk::testing::assert_labels_nonempty(&out, "method", "labels");
+        intentumdiff_plugin_sdk::testing::assert_labels_nonempty(&out, "class_definition", "labels");
+        intentumdiff_plugin_sdk::testing::assert_labels_nonempty(&out, "method", "labels");
     }
 }
