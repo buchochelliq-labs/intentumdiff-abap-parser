@@ -553,7 +553,7 @@ pub(crate) fn parse_abap_fallback(source: &str) -> String {
                 if words.len() >= 2 {
                     let id = format!("0.{}", counter);
                     counter += 1;
-                    root_children.push(leaf(&id, "report", &extract_name(&words, 1), lineno));
+                    root_children.push(leaf_span(&id, "report", &extract_name(&words, 1), lineno, end_col));
                 }
             }
             "CLASS" if words.len() >= 3 => {
@@ -821,6 +821,33 @@ mod tests {
         let out = parse_abap("REPORT ztest.");
         intentumdiff_plugin_sdk::testing::assert_contains_node_type(&out, "report", "report");
     }
+
+    #[test]
+    fn test_fallback_report_and_program_have_source_byte_spans() {
+        // FORM is not handled by tree-sitter and intentionally forces the
+        // conservative scanner used by the 74-language RC corpus fixture.
+        // A nonempty report declaration must never get (0,0)–(0,0).
+        for declaration in ["REPORT z_demo.", "PROGRAM z_café."] {
+            let src = format!("{declaration}\n\nFORM greet.\n  WRITE: 'hi'.\nENDFORM.\n");
+            assert!(parse_abap_tree_sitter(&src).is_none());
+            let tree: SemanticNode = serde_json::from_str(&parse_abap(&src)).unwrap();
+            let report = tree
+                .children
+                .iter()
+                .find(|node| node.node_type == "report")
+                .expect("report declaration node");
+            assert_eq!(report.position.start_line, 0);
+            assert_eq!(report.position.start_col, 0);
+            assert_eq!(report.position.end_line, 0);
+            assert_eq!(
+                report.position.end_col,
+                declaration.len() as u32,
+                "end_col must use UTF-8 byte columns, not characters"
+            );
+            assert!(report.position.end_col > report.position.start_col);
+        }
+    }
+
 
     #[test]
     fn test_class_definition() {
