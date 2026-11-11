@@ -333,6 +333,14 @@ impl<'a> Ctx<'a> {
         Ctx { source, literals, lines: LineIndex::new(source) }
     }
 
+    /// The literal spans intersecting `start..end`. `literals` is sorted and
+    /// disjoint, so both ends are found by binary search (linear projection).
+    fn literals_overlapping(&self, start: usize, end: usize) -> &[(usize, usize)] {
+        let lo = self.literals.partition_point(|&(_, le)| le <= start);
+        let hi = lo + self.literals[lo..].partition_point(|&(ls, _)| ls < end);
+        &self.literals[lo..hi]
+    }
+
     fn node(&self, id: &str, node_type: &str, label: &str, start: usize, end: usize) -> SemanticNodeBuilder {
         let (sr, sc) = self.lines.pos(start);
         let (er, ec) = self.lines.pos(end);
@@ -497,7 +505,7 @@ fn data_statement_node(ctx: &Ctx<'_>, id: &str, start: usize, end: usize) -> Opt
 /// own node; string literals become `string_literal` with their full payload.
 fn unmodeled_nodes(ctx: &Ctx<'_>, id: &str, start: usize, end: usize) -> Vec<SemanticNode> {
     let src = ctx.source;
-    if ctx.literals.contains(&(start, end)) {
+    if ctx.literals.binary_search(&(start, end)).is_ok() {
         let text = &src[start..end];
         return vec![ctx.node(id, "string_literal", text, start, end).build()];
     }
@@ -764,9 +772,8 @@ fn ts_label(node: tree_sitter::Node<'_>, source: &[u8], semantic_type: &str) -> 
 fn ts_unmodeled_range(ctx: &Ctx<'_>, child: tree_sitter::Node<'_>) -> Option<(usize, usize)> {
     let (mut s, mut e) = (child.start_byte(), child.end_byte());
     let mut broken = child.is_error();
-    for &(ls, le) in &ctx.literals {
-        let intersects = ls < e && s < le;
-        if intersects && !(s <= ls && le <= e) {
+    for &(ls, le) in ctx.literals_overlapping(s, e) {
+        if !(s <= ls && le <= e) {
             broken = true;
         }
     }
@@ -776,11 +783,10 @@ fn ts_unmodeled_range(ctx: &Ctx<'_>, child: tree_sitter::Node<'_>) -> Option<(us
     // Widen to every literal the range touches (repeat: widening can reach more).
     loop {
         let (ps, pe) = (s, e);
-        for &(ls, le) in &ctx.literals {
-            if ls < e && s < le {
-                s = s.min(ls);
-                e = e.max(le);
-            }
+        let touched = ctx.literals_overlapping(s, e);
+        if let (Some(&(ls, _)), Some(&(_, le))) = (touched.first(), touched.last()) {
+            s = s.min(ls);
+            e = e.max(le);
         }
         if (ps, pe) == (s, e) {
             return Some((s, e));
@@ -1642,5 +1648,31 @@ mod tests {
         assert_eq!(writes.len(), 3);
         assert_eq!(writes[0].label, "`a b`, 'x'");
         assert_ne!(old_t.structural_hash, new_t.structural_hash);
+    }
+
+    // -- Regression: literal overlap checks stay linear (#10) --
+
+    #[test]
+    fn test_literal_overlap_projection_scales_linearly() {
+        fn report(n: usize) -> String {
+            let mut s = String::from("REPORT zprobe.\n");
+            for _ in 0..n {
+                s.push_str("WRITE 'text'.\n");
+            }
+            s
+        }
+        fn time(src: &str) -> std::time::Duration {
+            let t = std::time::Instant::now();
+            let root = tree(src);
+            assert_eq!(find(&root, "write_statement").len(), src.lines().count() - 1);
+            t.elapsed()
+        }
+        let (small, large) = (report(10_000), report(20_000));
+        time(&small); // warm up
+        let ts = (0..3).map(|_| time(&small)).min().unwrap();
+        let tl = (0..3).map(|_| time(&large)).min().unwrap();
+        // Linear cost doubles; the quadratic scan used to quadruple it.
+        let ratio = tl.as_secs_f64() / ts.as_secs_f64();
+        assert!(ratio < 3.0, "20k/10k projection time ratio {ratio:.2} ({ts:?} vs {tl:?})");
     }
 }
